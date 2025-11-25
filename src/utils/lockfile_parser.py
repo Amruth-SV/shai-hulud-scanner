@@ -7,8 +7,14 @@ import json
 import os
 import re
 from pathlib import Path
+
 import yaml
+
 from .logger import log
+
+YARN_BERRY_PROTOCOL_RE = re.compile(
+    r'^(?P<name>(?:@[^/@]+/)?[^@/]+)@(?:npm|patch|workspace|link|file|exec|git|http|https):'
+)
 
 def parse_lockfile(directory):
     """
@@ -80,25 +86,74 @@ def extract_npm_v6_deps(deps_dict):
     return dependencies
 
 def parse_yarn_lockfile(lockfile_path):
-    """Parse Yarn yarn.lock file"""
-    dependencies = []
-    
+    """Parse Yarn yarn.lock file (classic v1 or Berry v2+)"""
     try:
         with open(lockfile_path, 'r', encoding='utf-8') as f:
             content = f.read()
-        
-        # Yarn lockfile format: "package@version", "package@^version":
-        # Use regex to extract package names and versions
-        pattern = r'^"?([^@\s]+)@[^"]*"?:\s*\n(?:\s+.*\n)*?\s+version\s+"([^"]+)"'
-        matches = re.findall(pattern, content, re.MULTILINE)
-        
-        for name, version in matches:
-            dependencies.append({'name': name, 'version': version})
-    
-    except (FileNotFoundError, Exception) as e:
-        log.debug(f"Failed to parse Yarn lockfile {lockfile_path}: {e}")
-    
+    except FileNotFoundError:
+        return []
+
+    # Yarn Berry (2+) uses strict YAML with __metadata section
+    try:
+        lock_data = yaml.safe_load(content)
+        if isinstance(lock_data, dict) and any(
+            meta_key in lock_data for meta_key in ('__metadata', '__metadata__')
+        ):
+            return _parse_yarn_berry_lock(lock_data)
+    except yaml.YAMLError:
+        pass
+
+    # Fallback to Yarn classic parser
+    return _parse_yarn_classic_lock(content)
+
+
+def _parse_yarn_classic_lock(content):
+    """Parse Yarn 1.x lockfiles that use the legacy format"""
+    pattern = re.compile(
+        r'^"?([^@\s]+)@[^"]*"?:\s*\n(?:[ \t]+.*\n)*?[ \t]+version\s+"([^"]+)"',
+        re.MULTILINE,
+    )
+    return [{'name': name, 'version': version} for name, version in pattern.findall(content)]
+
+
+def _parse_yarn_berry_lock(lock_data):
+    """Parse Yarn 2+/Berry YAML lockfiles"""
+    dependencies = []
+    meta_keys = {'__metadata', '__metadata__'}
+    for descriptor, entry in lock_data.items():
+        if descriptor in meta_keys or not isinstance(entry, dict):
+            continue
+
+        version = entry.get('version')
+        if not version:
+            continue
+
+        name = _extract_yarn_berry_name(descriptor)
+        if not name:
+            continue
+
+        dependencies.append({'name': name, 'version': str(version)})
     return dependencies
+
+
+def _extract_yarn_berry_name(descriptor):
+    """
+    Extract package name from a Yarn 2 descriptor (may contain multiple descriptors separated by commas)
+    """
+    first_descriptor = descriptor.split(',')[0].strip().strip('"').strip("'")
+    match = YARN_BERRY_PROTOCOL_RE.match(first_descriptor)
+    if match:
+        return match.group('name')
+
+    if first_descriptor.startswith('@'):
+        second_at = first_descriptor.find('@', 1)
+        if second_at != -1:
+            return first_descriptor[:second_at]
+
+    if '@' in first_descriptor:
+        return first_descriptor.split('@', 1)[0]
+
+    return first_descriptor
 
 def parse_pnpm_lockfile(lockfile_path):
     """Parse PNPM pnpm-lock.yaml file"""
