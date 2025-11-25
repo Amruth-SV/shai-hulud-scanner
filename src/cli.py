@@ -82,7 +82,12 @@ def main():
         action='store_true',
         help='Display overview of Shai-Hulud worm'
     )
-    
+    parser.add_argument(
+        '--offline',
+        action='store_true',
+        help='Use local affected-packages.json without fetching from remote'
+    )
+
     args = parser.parse_args()
     
     # Handle overview option
@@ -125,7 +130,7 @@ def main():
     
     try:
         # Load badlist
-        bad_packages = get_badlist()
+        bad_packages = get_badlist(offline=args.offline)
         
         # Run scanners
         dep_results = scan_dependencies(directory, bad_packages, is_json)
