@@ -37,11 +37,38 @@ def fetch_remote_affected_list(url=DEFAULT_BADLIST_URL):
     except Exception as e:
         raise Exception(f"Failed to fetch remote affected list: {e}")
 
-def get_badlist():
+def load_local_badlist():
     """
-    Gets affected list by fetching fresh data on every run, with local fallback only if remote fails.
+    Loads affected list from local file.
     Returns affected list dictionary
     """
+    try:
+        # Look for local affected list file
+        script_dir = Path(__file__).parent.parent.parent
+        local_affected_list_path = script_dir / 'affected-packages.json'
+
+        with open(local_affected_list_path, 'r', encoding='utf-8') as f:
+            local_affected_list = json.load(f)
+
+        package_count = len([k for k in local_affected_list.keys() if not k.startswith('_')])
+        log.info(f"📦 Using local affected-packages.json ({package_count} packages).")
+
+        return local_affected_list
+
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        log.error("Failed to load local affected-packages.json. Cannot proceed without threat intelligence.")
+        raise Exception("No affected list available - ensure affected-packages.json exists and is readable")
+
+def get_badlist(offline=False):
+    """
+    Gets affected list by fetching fresh data on every run, with local fallback only if remote fails.
+    If offline=True, skips remote fetch and uses local file directly.
+    Returns affected list dictionary
+    """
+    if offline:
+        log.info("Offline mode enabled - using local affected-packages.json")
+        return load_local_badlist()
+
     try:
         # Always try to fetch fresh data first
         return fetch_remote_affected_list()
@@ -49,20 +76,4 @@ def get_badlist():
         # Only use local file if remote fetch fails
         log.warn(f"Remote fetch failed: {error}")
         log.info("Falling back to local affected-packages.json...")
-        
-        try:
-            # Look for local affected list file
-            script_dir = Path(__file__).parent.parent.parent
-            local_affected_list_path = script_dir / 'affected-packages.json'
-            
-            with open(local_affected_list_path, 'r', encoding='utf-8') as f:
-                local_affected_list = json.load(f)
-            
-            package_count = len([k for k in local_affected_list.keys() if not k.startswith('_')])
-            log.info(f"📦 Using local affected-packages.json ({package_count} packages).")
-            
-            return local_affected_list
-            
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            log.error("Failed to load local affected-packages.json. Cannot proceed without threat intelligence.")
-            raise Exception("No affected list available - ensure affected-packages.json exists and is readable")
+        return load_local_badlist()

@@ -180,6 +180,9 @@ shai-hulud-scanner --scan-workflows
 
 # Verbose output
 shai-hulud-scanner --verbose
+
+# Offline mode (does not use affected-packages from github)
+shai-hulud-scanner --offline
 ```
 
 ### CLI Reference
