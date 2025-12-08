@@ -51,6 +51,7 @@ Multiple vendors have reported **thousands of malicious packages and tens of tho
 
 **Sources (v2 / Sha1-Hulud, Bun variant):**
 
+- https://www.wiz.io/blog/shai-hulud-2-0-ongoing-supply-chain-attack
 - https://helixguard.ai/blog/malicious-sha1hulud-2025-11-24  
 - https://www.stepsecurity.io/blog/sha1-hulud-the-second-coming-zapier-ens-domains-and-other-prominent-npm-packages-compromised  
 - https://www.sonatype.com/blog/the-second-coming-of-shai-hulud-attackers-innovating-on-npm  
